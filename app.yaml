@@ -1,0 +1,19 @@
+command:
+  - uvicorn
+  - backend.main:app
+  - --host=0.0.0.0
+  - --port=8000
+env:
+  - name: CATALOG
+    value: main
+  - name: SCHEMA
+    value: coupon_mgmt
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: ""
+  - name: DATABRICKS_SERVER_HOSTNAME
+    value: ""
+  - name: DATABRICKS_HTTP_PATH
+    value: ""
+resources:
+  - name: coupons-sql-warehouse
+    type: sql_warehouse
