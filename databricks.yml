@@ -48,6 +48,18 @@ resources:
               - ${var.schema}
           environment_key: serverless
 
+        - task_key: grant_access
+          depends_on:
+            - task_key: seed
+          spark_python_task:
+            python_file: ${workspace.file_path}/setup/grant_access.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+          environment_key: serverless
+
   apps:
     coupons-app:
       name: coupons-offer-management
