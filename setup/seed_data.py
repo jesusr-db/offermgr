@@ -174,6 +174,8 @@ def executemany(cursor, sql: str, rows: list):
 # ---------------------------------------------------------------------------
 
 def create_tables(cursor, catalog: str, schema: str):
+    execute_query(cursor, f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
+    print("  Schema created (or already exists).")
     ddls = [
         f"""
         CREATE TABLE IF NOT EXISTS {catalog}.{schema}.offers (
@@ -367,7 +369,14 @@ def resolve_connection_params(args):
             sys.exit(1)
         http_path = f"/sql/1.0/warehouses/{args.warehouse_id}"
 
-    token = w.config.token
+    # config.authenticate() works for all auth methods (PAT, OAuth, cluster runtime)
+    # whereas config.token only returns static PATs.
+    try:
+        auth_headers = w.config.authenticate()
+        bearer = auth_headers.get("Authorization", "")
+        token = bearer.split(" ", 1)[1] if " " in bearer else ""
+    except Exception:
+        token = ""
     if not token:
         print("ERROR: Could not resolve Databricks token from SDK config.", file=sys.stderr)
         sys.exit(1)

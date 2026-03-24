@@ -5,15 +5,13 @@ command:
   - --port=8000
 env:
   - name: CATALOG
-    value: main
+    value: vdm_classic_rikfy0_catalog
   - name: SCHEMA
     value: coupon_mgmt
   - name: DATABRICKS_WAREHOUSE_ID
-    value: ""
-  - name: DATABRICKS_SERVER_HOSTNAME
-    value: ""
-  - name: DATABRICKS_HTTP_PATH
-    value: ""
+    value: 708f9ebed64875ba
 resources:
-  - name: coupons-sql-warehouse
-    type: sql_warehouse
+  - name: warehouse
+    sql_warehouse:
+      id: 708f9ebed64875ba
+      permission: CAN_USE

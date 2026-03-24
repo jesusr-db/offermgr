@@ -247,6 +247,7 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
   );
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Sync form when offer changes
   useEffect(() => {
@@ -291,6 +292,7 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       const payload: Partial<Offer> & { menu_item_ids?: string[] } = {
         coupon_code: form.coupon_code,
@@ -309,6 +311,8 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
       };
       await onSave(payload);
       setIsDirty(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSaving(false);
     }
@@ -326,6 +330,7 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
 
   const handleStatusTransition = async (newStatus: "active" | "expired") => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       const payload: Partial<Offer> & { menu_item_ids?: string[] } = {
         coupon_code: form.coupon_code,
@@ -344,6 +349,8 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
       };
       await onSave(payload);
       setIsDirty(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSaving(false);
     }
@@ -509,6 +516,11 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
         >
           {isSaving ? "Saving..." : "Save"}
         </button>
+        {saveError && (
+          <span style={{ fontSize: 12, color: "var(--status-expired)", flex: 1 }}>
+            {saveError}
+          </span>
+        )}
         <button
           style={resetBtnStyle}
           onClick={handleReset}

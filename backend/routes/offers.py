@@ -118,7 +118,9 @@ class UpdateOfferRequest(BaseModel):
 def list_offers(
     search: Optional[str] = None,
     status: Optional[str] = None,
+    h4_loyalty_type: Optional[str] = None,
     h5_discount_type: Optional[str] = None,
+    h6_item_structure: Optional[str] = None,
     h1_org_scope: Optional[str] = None,
     x_persona: Optional[str] = Header(default=None),
 ) -> list[dict]:
@@ -147,9 +149,17 @@ def list_offers(
         where_parts.append("status = %s")
         params.append(status)
 
+    if h4_loyalty_type:
+        where_parts.append("h4_loyalty_type = %s")
+        params.append(h4_loyalty_type)
+
     if h5_discount_type:
         where_parts.append("h5_discount_type = %s")
         params.append(h5_discount_type)
+
+    if h6_item_structure:
+        where_parts.append("h6_item_structure = %s")
+        params.append(h6_item_structure)
 
     if h1_org_scope:
         where_parts.append("h1_org_scope = %s")

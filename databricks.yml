@@ -6,37 +6,67 @@ workspace:
 
 variables:
   catalog:
-    default: main
+    default: vdm_classic_rikfy0_catalog
   schema:
     default: coupon_mgmt
+  warehouse_id:
+    default: ""
+    description: "SQL Warehouse ID used by the seed-data job and app"
+  server_hostname:
+    default: ""
+    description: "Databricks workspace hostname (no https://) for SQL Warehouse connections"
 
 targets:
   dev:
     variables:
-      catalog: main
+      catalog: vdm_classic_rikfy0_catalog
       schema: coupon_mgmt
+      warehouse_id: 708f9ebed64875ba
+      server_hostname: nvirginia.cloud.databricks.com
   prod:
     variables:
-      catalog: dpz_prod
+      catalog: vdm_classic_rikfy0_catalog
       schema: coupon_mgmt
+      warehouse_id: 708f9ebed64875ba
+      server_hostname: nvirginia.cloud.databricks.com
 
 resources:
+  jobs:
+    seed-data:
+      name: coupons-seed-data
+      tasks:
+        - task_key: seed
+          spark_python_task:
+            python_file: ${workspace.file_path}/setup/seed_data.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+              - --warehouse-id
+              - ${var.warehouse_id}
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: i3.xlarge
+            num_workers: 0
+            data_security_mode: SINGLE_USER
+            single_user_name: jesus.rodriguez@databricks.com
+            spark_conf:
+              spark.master: "local[*, 4]"
+              spark.databricks.cluster.profile: singleNode
+            custom_tags:
+              ResourceClass: SingleNode
+          libraries:
+            - pypi:
+                package: databricks-sql-connector>=3.0.0
+            - pypi:
+                package: databricks-sdk>=0.49.0
+
   apps:
     coupons-app:
       name: coupons-offer-management
       description: "Coupon & Offer Management — DPZ POC demo"
       source_code_path: .
-      config:
-        command:
-          - uvicorn
-          - backend.main:app
-          - --host=0.0.0.0
-          - --port=8000
-        env:
-          - name: CATALOG
-            value: ${var.catalog}
-          - name: SCHEMA
-            value: ${var.schema}
       permissions:
         - user_name: jesus.rodriguez@databricks.com
           level: CAN_MANAGE

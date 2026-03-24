@@ -14,24 +14,12 @@ CATALOG: str = os.environ.get("CATALOG", "main")
 SCHEMA: str = os.environ.get("SCHEMA", "coupon_mgmt")
 
 # ---------------------------------------------------------------------------
-# SQL Warehouse connection — required at runtime
+# SQL Warehouse connection — warehouse ID injected via app.yaml valueFrom
 # ---------------------------------------------------------------------------
 DATABRICKS_WAREHOUSE_ID: str = os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
-DATABRICKS_SERVER_HOSTNAME: str = os.environ.get("DATABRICKS_SERVER_HOSTNAME", "")
-DATABRICKS_HTTP_PATH: str = os.environ.get("DATABRICKS_HTTP_PATH", "")
 
-_MISSING = [
-    name
-    for name, val in [
-        ("DATABRICKS_WAREHOUSE_ID", DATABRICKS_WAREHOUSE_ID),
-        ("DATABRICKS_SERVER_HOSTNAME", DATABRICKS_SERVER_HOSTNAME),
-        ("DATABRICKS_HTTP_PATH", DATABRICKS_HTTP_PATH),
-    ]
-    if not val
-]
-
-if _MISSING:
+if not DATABRICKS_WAREHOUSE_ID:
     raise RuntimeError(
-        f"Missing required environment variable(s): {', '.join(_MISSING)}. "
-        "Set these before starting the application."
+        "Missing required environment variable: DATABRICKS_WAREHOUSE_ID. "
+        "Ensure the app.yaml warehouse resource is configured."
     )

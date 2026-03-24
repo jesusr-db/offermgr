@@ -95,14 +95,34 @@ const FilterBar: React.FC<FilterBarProps> = ({
 
       <select
         style={selectStyle}
+        value={filters.h4_loyalty_type}
+        onChange={(e) => onFilterChange({ h4_loyalty_type: e.target.value })}
+      >
+        <option value="">All Loyalty Types</option>
+        {hierarchyValues.h4_loyalty_type.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+
+      <select
+        style={selectStyle}
         value={filters.h5_discount_type}
         onChange={(e) => onFilterChange({ h5_discount_type: e.target.value })}
       >
         <option value="">All Discount Types</option>
         {hierarchyValues.h5_discount_type.map((v) => (
-          <option key={v} value={v}>
-            {v}
-          </option>
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+
+      <select
+        style={selectStyle}
+        value={filters.h6_item_structure}
+        onChange={(e) => onFilterChange({ h6_item_structure: e.target.value })}
+      >
+        <option value="">All Item Structures</option>
+        {hierarchyValues.h6_item_structure.map((v) => (
+          <option key={v} value={v}>{v}</option>
         ))}
       </select>
 
@@ -113,9 +133,7 @@ const FilterBar: React.FC<FilterBarProps> = ({
       >
         <option value="">All Org Scopes</option>
         {hierarchyValues.h1_org_scope.map((v) => (
-          <option key={v} value={v}>
-            {v}
-          </option>
+          <option key={v} value={v}>{v}</option>
         ))}
       </select>
 

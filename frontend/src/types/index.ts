@@ -45,7 +45,9 @@ export interface HierarchyValues {
 export interface OfferFilters {
   search: string;
   status: string;
+  h4_loyalty_type: string;
   h5_discount_type: string;
+  h6_item_structure: string;
   h1_org_scope: string;
 }
 

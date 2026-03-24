@@ -4,7 +4,9 @@ import type { Offer, OfferFilters } from "../types";
 const DEFAULT_FILTERS: OfferFilters = {
   search: "",
   status: "",
+  h4_loyalty_type: "",
   h5_discount_type: "",
+  h6_item_structure: "",
   h1_org_scope: "",
 };
 
@@ -161,10 +163,13 @@ export function useOffers(initialPersona = ""): UseOffersReturn {
         const text = await res.text();
         throw new Error(`Update failed (${res.status}): ${text}`);
       }
+      // Refresh the list so the updated row (e.g. new updated_at) appears.
+      // Do NOT call selectOffer here — re-fetching would trigger OfferEditor's
+      // useEffect and reset the form back to server data, making edits appear
+      // lost even when the save succeeded.
       refreshList();
-      selectOffer(offerId);
     },
-    [makeHeaders, refreshList, selectOffer]
+    [makeHeaders, refreshList]
   );
 
   return {

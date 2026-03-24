@@ -33,8 +33,11 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Manage application lifecycle — cache warm on startup, cleanup on shutdown."""
     logger.info("Starting Coupon Management application...")
-    init_caches()
-    logger.info("Application ready")
+    try:
+        init_caches()
+        logger.info("Application ready")
+    except Exception as exc:
+        logger.warning("Cache warm-up failed (%s) — caches will load on first request", exc)
     yield
     logger.info("Shutting down...")
     close_connection()
@@ -74,7 +77,7 @@ def health_check():
 # ---------------------------------------------------------------------------
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
-if FRONTEND_DIR.exists():
+if (FRONTEND_DIR / "index.html").exists():
     # Serve static assets (JS, CSS, images) under /assets
     app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIR / "assets")), name="assets")
 

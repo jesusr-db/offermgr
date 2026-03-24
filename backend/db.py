@@ -1,35 +1,33 @@
+from __future__ import annotations
+
 """
-Coupon Management — SQL Warehouse Connection & Query Helpers
+Coupon Management — SQL Warehouse Query Helpers
 
-Uses databricks-sql-connector (synchronous). When running as a Databricks App
-the WorkspaceClient handles authentication automatically via the app's service
-principal. Token is retrieved via WorkspaceClient().config.token.
-
-Cache strategy:
-  - Menu items: loaded once from DB at startup, held in _menu_items_cache
-  - Hierarchy values: static constant, returned immediately without a DB call
+Uses Databricks SDK StatementExecutionAPI (synchronous). When running as a
+Databricks App the WorkspaceClient handles authentication automatically via
+the app's service principal — no manual token extraction required.
 """
 
 import logging
+from decimal import Decimal
 from typing import Any
 
-import databricks.sql
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.sql import StatementParameterListItem
 
-from backend.config import CATALOG, DATABRICKS_HTTP_PATH, DATABRICKS_SERVER_HOSTNAME, SCHEMA
+from backend.config import CATALOG, DATABRICKS_WAREHOUSE_ID, SCHEMA
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Connection state
+# Client state
 # ---------------------------------------------------------------------------
-_connection: databricks.sql.client.Connection | None = None  # type: ignore[name-defined]
+_client: WorkspaceClient | None = None
 
 # ---------------------------------------------------------------------------
 # Cache state
 # ---------------------------------------------------------------------------
 _menu_items_cache: list[dict] | None = None
-# Note: hierarchy values are a compile-time constant (HIERARCHY_VALUES below) — no DB cache needed.
 
 # ---------------------------------------------------------------------------
 # Static hierarchy values (no DB call required — values are spec-defined)
@@ -43,62 +41,74 @@ HIERARCHY_VALUES: dict[str, list[str]] = {
     "h6_item_structure": ["Bundle", "Single Item", "Unknown"],
 }
 
+# ---------------------------------------------------------------------------
+# Column type coercion
+# ---------------------------------------------------------------------------
+_NUMERIC_TYPES = {"int", "integer", "bigint", "smallint", "tinyint", "long", "short", "byte"}
+_DECIMAL_TYPES = {"double", "float", "real"}
+
+
+def _coerce(value: str | None, type_text: str | None) -> Any:
+    if value is None:
+        return None
+    tl = (type_text or "").lower()
+    if tl in _NUMERIC_TYPES:
+        return int(value)
+    if tl in _DECIMAL_TYPES or tl.startswith("decimal"):
+        return Decimal(value)
+    return value
+
 
 # ---------------------------------------------------------------------------
-# Connection management
+# Client management
 # ---------------------------------------------------------------------------
 
-def _is_connection_alive(conn: databricks.sql.client.Connection) -> bool:  # type: ignore[name-defined]
-    """Return True if the connection appears usable."""
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        cursor.close()
-        return True
-    except Exception:
-        return False
-
-
-def get_connection() -> databricks.sql.client.Connection:  # type: ignore[name-defined]
-    """Return a cached SQL Warehouse connection, creating one if needed.
-
-    Reconnects automatically if the cached connection is closed or dead.
-    """
-    global _connection
-
-    if _connection is not None and _is_connection_alive(_connection):
-        return _connection
-
-    if _connection is not None:
-        logger.warning("Existing SQL Warehouse connection is dead — reconnecting")
-        try:
-            _connection.close()
-        except Exception:
-            pass
-
-    logger.info("Opening SQL Warehouse connection (host=%s)", DATABRICKS_SERVER_HOSTNAME)
-    w = WorkspaceClient()
-    token = w.config.token
-
-    _connection = databricks.sql.connect(
-        server_hostname=DATABRICKS_SERVER_HOSTNAME,
-        http_path=DATABRICKS_HTTP_PATH,
-        access_token=token,
-    )
-    logger.info("SQL Warehouse connection established")
-    return _connection
+def _get_client() -> WorkspaceClient:
+    global _client
+    if _client is None:
+        _client = WorkspaceClient()
+        logger.info("WorkspaceClient initialised")
+    return _client
 
 
 def close_connection() -> None:
-    """Close the cached connection if one is open."""
-    global _connection
-    if _connection is not None:
-        try:
-            _connection.close()
-            logger.info("SQL Warehouse connection closed")
-        except Exception:
-            logger.exception("Error closing SQL Warehouse connection")
-        _connection = None
+    """Reset the cached WorkspaceClient. Kept for API compatibility."""
+    global _client
+    _client = None
+    logger.info("WorkspaceClient reset")
+
+
+# ---------------------------------------------------------------------------
+# Parameter conversion
+# ---------------------------------------------------------------------------
+
+def _to_named_params(sql: str, params: list[Any]) -> tuple[str, list[dict]]:
+    """Convert %s positional placeholders → :pN named params for Statement Execution API.
+
+    None values are rendered as NULL literals (safe for INSERT/UPDATE in this app
+    because None-valued WHERE comparisons already use IS NULL clauses in the callers).
+    """
+    sdk_params: list[dict] = []
+    parts: list[str] = []
+    pos = named = 0
+
+    i = 0
+    while i < len(sql):
+        if sql[i : i + 2] == "%s":
+            val = params[pos]
+            pos += 1
+            if val is None:
+                parts.append("NULL")
+            else:
+                parts.append(f":p{named}")
+                sdk_params.append(StatementParameterListItem(name=f"p{named}", value=str(val)))
+                named += 1
+            i += 2
+        else:
+            parts.append(sql[i])
+            i += 1
+
+    return "".join(parts), sdk_params
 
 
 # ---------------------------------------------------------------------------
@@ -106,26 +116,73 @@ def close_connection() -> None:
 # ---------------------------------------------------------------------------
 
 def execute_query(sql: str, params: list[Any] | None = None) -> list[dict]:
-    """Execute a SQL query and return results as a list of dicts.
+    """Execute a SQL statement via the Statement Execution API.
 
     Args:
         sql: SQL string. Use %s placeholders for parameters.
-        params: Optional list of parameter values.
+        params: Optional list of parameter values. None values → SQL NULL.
 
     Returns:
-        List of row dicts keyed by column name.
+        List of row dicts keyed by column name, with numeric types coerced.
     """
-    conn = get_connection()
-    cursor = conn.cursor()
-    try:
-        if params is not None:
-            cursor.execute(sql, params)
-        else:
-            cursor.execute(sql)
-        rows = cursor.fetchall()
-        return [row.asDict() for row in rows]
-    finally:
-        cursor.close()
+    w = _get_client()
+
+    sdk_params: list[dict] = []
+    if params:
+        sql, sdk_params = _to_named_params(sql, params)
+
+    kwargs: dict[str, Any] = {
+        "warehouse_id": DATABRICKS_WAREHOUSE_ID,
+        "statement": sql,
+        "catalog": CATALOG,
+        "schema": SCHEMA,
+        "wait_timeout": "50s",
+    }
+    if sdk_params:
+        kwargs["parameters"] = sdk_params
+
+    logger.debug("Executing: %.120s", sql)
+    result = w.statement_execution.execute_statement(**kwargs)
+
+    state = (
+        result.status.state.value
+        if result.status and result.status.state
+        else "UNKNOWN"
+    )
+    if state != "SUCCEEDED":
+        err = (
+            result.status.error.message
+            if result.status and result.status.error
+            else "unknown error"
+        )
+        raise RuntimeError(f"Statement failed ({state}): {err}")
+
+    if not result.manifest or not result.manifest.schema or not result.result:
+        return []
+
+    columns = [col.name for col in result.manifest.schema.columns]
+    col_types = [col.type_text for col in result.manifest.schema.columns]
+
+    # Collect first chunk
+    all_rows = list(result.result.data_array or [])
+
+    # Paginate through remaining chunks if any
+    next_idx = result.result.next_chunk_index
+    while next_idx is not None:
+        chunk = w.statement_execution.get_statement_result_chunk_n(
+            statement_id=result.statement_id,
+            chunk_index=next_idx,
+        )
+        all_rows.extend(chunk.data_array or [])
+        next_idx = chunk.next_chunk_index
+
+    return [
+        {
+            col: _coerce(val, typ)
+            for col, val, typ in zip(columns, row, col_types)
+        }
+        for row in all_rows
+    ]
 
 
 # ---------------------------------------------------------------------------
