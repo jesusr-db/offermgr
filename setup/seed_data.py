@@ -192,7 +192,7 @@ def grant_access(spark, catalog, schema):
     spark.sql(f"GRANT USE CATALOG ON CATALOG {catalog} TO `account users`")
     spark.sql(f"GRANT USE SCHEMA ON SCHEMA {catalog}.{schema} TO `account users`")
     for table in ("offers", "menu_items", "offer_menu_items"):
-        spark.sql(f"GRANT SELECT ON TABLE {catalog}.{schema}.{table} TO `account users`")
+        spark.sql(f"GRANT SELECT, MODIFY ON TABLE {catalog}.{schema}.{table} TO `account users`")
     print("  Grants applied.")
 
 
