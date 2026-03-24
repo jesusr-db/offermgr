@@ -53,6 +53,24 @@ resources:
       name: coupons-offer-management
       description: "Coupon & Offer Management — DPZ POC demo"
       source_code_path: .
+      config:
+        command:
+          - uvicorn
+          - backend.main:app
+          - --host=0.0.0.0
+          - --port=8000
+        env:
+          - name: CATALOG
+            value: ${var.catalog}
+          - name: SCHEMA
+            value: ${var.schema}
+          - name: DATABRICKS_WAREHOUSE_ID
+            value: ${var.warehouse_id}
+      resources:
+        - name: warehouse
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
       permissions:
         - user_name: jesus.rodriguez@databricks.com
           level: CAN_MANAGE
@@ -62,5 +80,4 @@ sync:
     - "backend/**"
     - "frontend/dist/**"
     - "setup/**"
-    - "app.yaml"
     - "requirements.txt"
