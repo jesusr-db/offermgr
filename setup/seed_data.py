@@ -197,6 +197,21 @@ def grant_access(spark, catalog, schema):
 
 
 # ---------------------------------------------------------------------------
+# Existence check
+# ---------------------------------------------------------------------------
+
+def data_exists(spark, catalog, schema) -> bool:
+    """Return True if the offers table exists and already has rows."""
+    try:
+        count = spark.sql(
+            f"SELECT COUNT(*) AS n FROM {catalog}.{schema}.offers"
+        ).collect()[0]["n"]
+        return count > 0
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Delta writes
 # ---------------------------------------------------------------------------
 
@@ -249,6 +264,8 @@ def parse_args():
     )
     parser.add_argument("--catalog", default=os.environ.get("CATALOG", "main"))
     parser.add_argument("--schema",  default=os.environ.get("SCHEMA", "coupon_mgmt"))
+    parser.add_argument("--force",   action="store_true",
+                        help="Overwrite existing data even if tables are populated.")
     return parser.parse_args()
 
 
@@ -264,6 +281,10 @@ def main():
     print(f"Target: {catalog}.{schema}")
 
     setup_schema_and_tables(spark, catalog, schema)
+
+    if data_exists(spark, catalog, schema) and not args.force:
+        print("Data already exists — skipping seed. Run with --force to overwrite.")
+        return
 
     print("Generating seed data...")
     offers   = generate_offers(fake)
