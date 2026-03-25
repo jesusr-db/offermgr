@@ -19,6 +19,7 @@ from decimal import Decimal
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.config import Config
 from databricks.sdk.service.sql import StatementParameterListItem
 
 from backend.config import CATALOG, DATABRICKS_WAREHOUSE_ID, SCHEMA
@@ -81,7 +82,7 @@ def _get_client(token: str | None = None) -> WorkspaceClient:
         host = os.environ.get("DATABRICKS_HOST", "")
         if host and not host.startswith("http"):
             host = f"https://{host}"
-        return WorkspaceClient(host=host, token=token)
+        return WorkspaceClient(config=Config(host=host, token=token))
 
     global _client
     if _client is None:
