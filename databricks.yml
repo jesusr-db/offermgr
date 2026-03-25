@@ -26,6 +26,13 @@ targets:
       catalog: jmr_demo
       schema: coupon_mgmt
       warehouse_id: e9b34f7a2e4b0561
+  azure:
+    workspace:
+      profile: azure
+    variables:
+      catalog: jmr_demo
+      schema: coupon_mgmt
+      warehouse_id: 148ccb90800933a1
 
 resources:
   jobs:
@@ -53,6 +60,23 @@ resources:
             - task_key: seed
           spark_python_task:
             python_file: ${workspace.file_path}/setup/grant_access.py
+            parameters:
+              - --catalog
+              - ${var.catalog}
+              - --schema
+              - ${var.schema}
+          environment_key: serverless
+
+    destroy-data:
+      name: coupons-destroy-data
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "1"
+      tasks:
+        - task_key: drop_schema
+          spark_python_task:
+            python_file: ${workspace.file_path}/setup/destroy_data.py
             parameters:
               - --catalog
               - ${var.catalog}
