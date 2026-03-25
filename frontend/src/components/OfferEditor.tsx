@@ -30,6 +30,39 @@ interface FormState {
   menu_item_ids: string[];
 }
 
+interface FormErrors {
+  coupon_code?: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  dollar_amount?: string;
+}
+
+function validateForm(form: FormState): FormErrors {
+  const errors: FormErrors = {};
+  if (!form.coupon_code.trim()) {
+    errors.coupon_code = "Required";
+  }
+  if (!form.description.trim()) {
+    errors.description = "Required";
+  }
+  if (!form.start_date) {
+    errors.start_date = "Required";
+  }
+  if (!form.end_date) {
+    errors.end_date = "Required";
+  } else if (form.start_date && form.end_date < form.start_date) {
+    errors.end_date = "Must be on or after start date";
+  }
+  if (form.dollar_amount !== "") {
+    const n = Number(form.dollar_amount);
+    if (isNaN(n) || n < 0) {
+      errors.dollar_amount = "Must be a positive number";
+    }
+  }
+  return errors;
+}
+
 function offerToForm(offer: Offer): FormState {
   return {
     coupon_code: offer.coupon_code,
@@ -218,6 +251,32 @@ const transitionBtnStyle = (color: string): React.CSSProperties => ({
   fontFamily: "var(--font-family)",
 });
 
+const errorTextStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--status-expired)",
+  marginTop: 2,
+};
+
+const inputErrorStyle: React.CSSProperties = {
+  ...inputStyle,
+  borderColor: "var(--status-expired)",
+};
+
+const monoInputErrorStyle: React.CSSProperties = {
+  ...monoInputStyle,
+  borderColor: "var(--status-expired)",
+};
+
+const textareaErrorStyle: React.CSSProperties = {
+  ...textareaStyle,
+  borderColor: "var(--status-expired)",
+};
+
+const requiredMarkStyle: React.CSSProperties = {
+  color: "var(--status-expired)",
+  marginLeft: 2,
+};
+
 const savingOverlayStyle: React.CSSProperties = {
   position: "absolute",
   inset: 0,
@@ -248,6 +307,14 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [touched, setTouched] = useState<Partial<Record<keyof FormState, boolean>>>({});
+
+  const errors = validateForm(form);
+  const hasErrors = Object.keys(errors).length > 0;
+
+  const markTouched = (field: keyof FormState) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
+  };
 
   // Sync form when offer changes
   useEffect(() => {
@@ -257,6 +324,7 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
       setForm(emptyForm());
     }
     setIsDirty(false);
+    setTouched({});
   }, [offer, isNew]);
 
   const markDirty = useCallback(() => {
@@ -291,6 +359,9 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
   );
 
   const handleSave = async () => {
+    // Touch all validated fields so errors become visible
+    setTouched({ coupon_code: true, description: true, start_date: true, end_date: true, dollar_amount: true });
+    if (hasErrors) return;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -329,6 +400,8 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
   };
 
   const handleStatusTransition = async (newStatus: "active" | "expired") => {
+    setTouched({ coupon_code: true, description: true, start_date: true, end_date: true, dollar_amount: true });
+    if (hasErrors) return;
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -415,25 +488,35 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
         <div style={sectionLabelFirstStyle}>Offer Details</div>
         <div style={fieldRowStyle}>
           <div style={fieldStyle}>
-            <label style={fieldLabelStyle}>Coupon Code</label>
+            <label style={fieldLabelStyle}>
+              Coupon Code<span style={requiredMarkStyle}>*</span>
+            </label>
             <input
-              style={monoInputStyle}
+              style={touched.coupon_code && errors.coupon_code ? monoInputErrorStyle : monoInputStyle}
               value={form.coupon_code}
               onChange={(e) => handleChange("coupon_code", e.target.value)}
+              onBlur={() => markTouched("coupon_code")}
               placeholder="e.g. SAVE10"
             />
+            {touched.coupon_code && errors.coupon_code && (
+              <span style={errorTextStyle}>{errors.coupon_code}</span>
+            )}
           </div>
           <div style={fieldStyle}>
             <label style={fieldLabelStyle}>Dollar Amount</label>
             <input
-              style={inputStyle}
+              style={touched.dollar_amount && errors.dollar_amount ? inputErrorStyle : inputStyle}
               type="number"
               step="0.01"
               min="0"
               value={form.dollar_amount}
               onChange={(e) => handleChange("dollar_amount", e.target.value)}
+              onBlur={() => markTouched("dollar_amount")}
               placeholder="e.g. 5.00"
             />
+            {touched.dollar_amount && errors.dollar_amount && (
+              <span style={errorTextStyle}>{errors.dollar_amount}</span>
+            )}
           </div>
           <div style={fieldStyle}>
             <label style={fieldLabelStyle}>Status</label>
@@ -453,33 +536,51 @@ const OfferEditor: React.FC<OfferEditorProps> = ({
         </div>
 
         <div style={{ ...fieldStyle, marginTop: 10, marginBottom: 4 }}>
-          <label style={fieldLabelStyle}>Description</label>
+          <label style={fieldLabelStyle}>
+            Description<span style={requiredMarkStyle}>*</span>
+          </label>
           <textarea
-            style={textareaStyle}
+            style={touched.description && errors.description ? textareaErrorStyle : textareaStyle}
             value={form.description}
             onChange={(e) => handleChange("description", e.target.value)}
+            onBlur={() => markTouched("description")}
             placeholder="Brief description of the offer"
           />
+          {touched.description && errors.description && (
+            <span style={errorTextStyle}>{errors.description}</span>
+          )}
         </div>
 
         <div style={{ ...fieldRowStyle, marginTop: 10 }}>
           <div style={fieldStyle}>
-            <label style={fieldLabelStyle}>Start Date</label>
+            <label style={fieldLabelStyle}>
+              Start Date<span style={requiredMarkStyle}>*</span>
+            </label>
             <input
-              style={inputStyle}
+              style={touched.start_date && errors.start_date ? inputErrorStyle : inputStyle}
               type="date"
               value={form.start_date}
               onChange={(e) => handleChange("start_date", e.target.value)}
+              onBlur={() => markTouched("start_date")}
             />
+            {touched.start_date && errors.start_date && (
+              <span style={errorTextStyle}>{errors.start_date}</span>
+            )}
           </div>
           <div style={fieldStyle}>
-            <label style={fieldLabelStyle}>End Date</label>
+            <label style={fieldLabelStyle}>
+              End Date<span style={requiredMarkStyle}>*</span>
+            </label>
             <input
-              style={inputStyle}
+              style={touched.end_date && errors.end_date ? inputErrorStyle : inputStyle}
               type="date"
               value={form.end_date}
               onChange={(e) => handleChange("end_date", e.target.value)}
+              onBlur={() => markTouched("end_date")}
             />
+            {touched.end_date && errors.end_date && (
+              <span style={errorTextStyle}>{errors.end_date}</span>
+            )}
           </div>
           <div />
         </div>

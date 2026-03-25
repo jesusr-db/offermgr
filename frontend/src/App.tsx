@@ -70,9 +70,10 @@ const App: React.FC = () => {
       .catch(() => {/* keep empty */});
   }, []);
 
-  // When persona changes in the dropdown, reset selection and update hook
+  // When persona changes in the dropdown, reset filters/selection and update hook
   const handlePersonaChange = (id: string) => {
     setPersona(id);
+    setFilters({ search: "", status: "", h4_loyalty_type: "", h5_discount_type: "", h6_item_structure: "", h1_org_scope: "" });
     selectOffer(null);
     setIsNew(false);
   };
