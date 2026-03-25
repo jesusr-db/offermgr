@@ -123,6 +123,7 @@ def list_offers(
     h6_item_structure: Optional[str] = None,
     h1_org_scope: Optional[str] = None,
     x_persona: Optional[str] = Header(default=None),
+    x_forwarded_access_token: Optional[str] = Header(default=None),
 ) -> list[dict]:
     """Return offers visible to the requesting persona.
 
@@ -180,14 +181,15 @@ def list_offers(
     )
 
     logger.info("list_offers persona=%s filters: search=%r status=%r", persona_id, search, status)
-    return execute_query(sql, params)
+    return execute_query(sql, params, token=x_forwarded_access_token)
 
 
 @router.get("/api/offers/{offer_id}")
-def get_offer(offer_id: str) -> dict:
+def get_offer(
+    offer_id: str,
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+) -> dict:
     """Return a single offer by ID, including its associated menu items."""
-    # Fetch the offer row — offer_id comes from the path, not user request body,
-    # but it is still parameterized to be safe.
     offer_rows = execute_query(
         f"SELECT offer_id, coupon_code, description, status,"
         f"       start_date, end_date, dollar_amount,"
@@ -198,6 +200,7 @@ def get_offer(offer_id: str) -> dict:
         f" FROM {CATALOG}.{SCHEMA}.offers"
         f" WHERE offer_id = %s",
         [offer_id],
+        token=x_forwarded_access_token,
     )
 
     if not offer_rows:
@@ -205,7 +208,6 @@ def get_offer(offer_id: str) -> dict:
 
     offer = offer_rows[0]
 
-    # Fetch associated menu items via JOIN
     menu_items = execute_query(
         f"SELECT mi.item_id, mi.name, mi.category, mi.base_price"
         f" FROM {CATALOG}.{SCHEMA}.offer_menu_items omi"
@@ -213,6 +215,7 @@ def get_offer(offer_id: str) -> dict:
         f"   ON omi.menu_item_id = mi.item_id"
         f" WHERE omi.offer_id = %s",
         [offer_id],
+        token=x_forwarded_access_token,
     )
 
     offer["menu_items"] = menu_items
@@ -220,7 +223,10 @@ def get_offer(offer_id: str) -> dict:
 
 
 @router.post("/api/offers", status_code=201)
-def create_offer(body: CreateOfferRequest) -> dict:
+def create_offer(
+    body: CreateOfferRequest,
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+) -> dict:
     """Create a new offer and optionally associate menu items."""
     offer_id = str(uuid4())
 
@@ -257,17 +263,22 @@ def create_offer(body: CreateOfferRequest) -> dict:
             body.persona_scope,
             body.persona_scope_id,
         ],
+        token=x_forwarded_access_token,
     )
 
     if body.menu_item_ids:
-        _insert_menu_items(offer_id, body.menu_item_ids)
+        _insert_menu_items(offer_id, body.menu_item_ids, token=x_forwarded_access_token)
 
     logger.info("Created offer offer_id=%s coupon_code=%r", offer_id, body.coupon_code)
     return {"offer_id": offer_id}
 
 
 @router.put("/api/offers/{offer_id}")
-def update_offer(offer_id: str, body: UpdateOfferRequest) -> dict:
+def update_offer(
+    offer_id: str,
+    body: UpdateOfferRequest,
+    x_forwarded_access_token: Optional[str] = Header(default=None),
+) -> dict:
     """Update an existing offer.
 
     Only fields provided in the request body are modified.
@@ -289,6 +300,7 @@ def update_offer(offer_id: str, body: UpdateOfferRequest) -> dict:
     existing = execute_query(
         f"SELECT offer_id FROM {CATALOG}.{SCHEMA}.offers WHERE offer_id = %s",
         [offer_id],
+        token=x_forwarded_access_token,
     )
     if not existing:
         raise HTTPException(status_code=404, detail=f"Offer {offer_id!r} not found")
@@ -329,6 +341,7 @@ def update_offer(offer_id: str, body: UpdateOfferRequest) -> dict:
         execute_query(
             f"UPDATE {CATALOG}.{SCHEMA}.offers SET {set_sql} WHERE offer_id = %s",
             set_params,
+            token=x_forwarded_access_token,
         )
 
     # Replace menu item associations if provided
@@ -336,9 +349,10 @@ def update_offer(offer_id: str, body: UpdateOfferRequest) -> dict:
         execute_query(
             f"DELETE FROM {CATALOG}.{SCHEMA}.offer_menu_items WHERE offer_id = %s",
             [offer_id],
+            token=x_forwarded_access_token,
         )
         if body.menu_item_ids:
-            _insert_menu_items(offer_id, body.menu_item_ids)
+            _insert_menu_items(offer_id, body.menu_item_ids, token=x_forwarded_access_token)
 
     logger.info("Updated offer offer_id=%s", offer_id)
     return {"offer_id": offer_id, "updated": True}
@@ -348,11 +362,16 @@ def update_offer(offer_id: str, body: UpdateOfferRequest) -> dict:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _insert_menu_items(offer_id: str, item_ids: list[str]) -> None:
+def _insert_menu_items(
+    offer_id: str,
+    item_ids: list[str],
+    token: Optional[str] = None,
+) -> None:
     """Insert rows into offer_menu_items for each menu_item_id."""
     for item_id in item_ids:
         execute_query(
             f"INSERT INTO {CATALOG}.{SCHEMA}.offer_menu_items (offer_id, menu_item_id)"
             f" VALUES (%s, %s)",
             [offer_id, item_id],
+            token=token,
         )

@@ -65,6 +65,8 @@ resources:
       name: coupons-offer-management
       description: "Coupon & Offer Management — DPZ POC demo"
       source_code_path: .
+      user_api_scopes:
+        - sql
       config:
         command:
           - uvicorn

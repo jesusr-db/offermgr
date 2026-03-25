@@ -3,12 +3,18 @@ from __future__ import annotations
 """
 Coupon Management — SQL Warehouse Query Helpers
 
-Uses Databricks SDK StatementExecutionAPI (synchronous). When running as a
-Databricks App the WorkspaceClient handles authentication automatically via
-the app's service principal — no manual token extraction required.
+Uses Databricks SDK StatementExecutionAPI (synchronous).
+
+Auth modes:
+  OBO (On-Behalf-Of) — when an x-forwarded-access-token header is present
+    (injected by the Databricks Apps runtime), a per-request WorkspaceClient
+    is created using that token so queries run as the calling user.
+  Service-principal fallback — no token present (local dev or startup cache
+    warm-up); WorkspaceClient() auto-resolves credentials from the environment.
 """
 
 import logging
+import os
 from decimal import Decimal
 from typing import Any
 
@@ -63,11 +69,24 @@ def _coerce(value: str | None, type_text: str | None) -> Any:
 # Client management
 # ---------------------------------------------------------------------------
 
-def _get_client() -> WorkspaceClient:
+def _get_client(token: str | None = None) -> WorkspaceClient:
+    """Return a WorkspaceClient.
+
+    If *token* is provided (OBO mode), creates a short-lived per-request
+    client using the user's forwarded access token.  Otherwise returns the
+    module-level singleton backed by the app's service principal (or local
+    CLI profile in dev).
+    """
+    if token:
+        host = os.environ.get("DATABRICKS_HOST", "")
+        if host and not host.startswith("http"):
+            host = f"https://{host}"
+        return WorkspaceClient(host=host, token=token)
+
     global _client
     if _client is None:
         _client = WorkspaceClient()
-        logger.info("WorkspaceClient initialised")
+        logger.info("WorkspaceClient initialised (service principal)")
     return _client
 
 
@@ -115,17 +134,24 @@ def _to_named_params(sql: str, params: list[Any]) -> tuple[str, list[dict]]:
 # Query execution
 # ---------------------------------------------------------------------------
 
-def execute_query(sql: str, params: list[Any] | None = None) -> list[dict]:
+def execute_query(
+    sql: str,
+    params: list[Any] | None = None,
+    token: str | None = None,
+) -> list[dict]:
     """Execute a SQL statement via the Statement Execution API.
 
     Args:
         sql: SQL string. Use %s placeholders for parameters.
         params: Optional list of parameter values. None values → SQL NULL.
+        token: Optional OBO user token from x-forwarded-access-token header.
+               When provided the query runs as the calling user; otherwise
+               runs as the app's service principal.
 
     Returns:
         List of row dicts keyed by column name, with numeric types coerced.
     """
-    w = _get_client()
+    w = _get_client(token)
 
     sdk_params: list[dict] = []
     if params:
